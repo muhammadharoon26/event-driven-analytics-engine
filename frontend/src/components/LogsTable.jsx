@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CheckCircle2, Clock, Loader2, ArrowRight } from 'lucide-react';
+import { Database, Clock, Loader2, ArrowRight, Activity } from 'lucide-react';
 
 const StatusBadge = ({ status }) => {
   if (status === 'ingesting') {
@@ -19,7 +19,7 @@ const StatusBadge = ({ status }) => {
   }
   return (
     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-      <CheckCircle2 className="w-3 h-3 mr-1" /> Postgres
+      <Database className="w-3 h-3 mr-1" /> Postgres
     </span>
   );
 };
@@ -80,8 +80,5 @@ const LogsTable = ({ logs }) => {
     </div>
   );
 };
-
-// Also require Activity here for empty state
-import { Activity } from 'lucide-react';
 
 export default LogsTable;

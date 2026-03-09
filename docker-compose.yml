@@ -13,10 +13,18 @@ services:
       - --node-id 0
       - --kafka-addr PLAINTEXT://0.0.0.0:29092,OUTSIDE://0.0.0.0:9092
       - --advertise-kafka-addr PLAINTEXT://redpanda:29092,OUTSIDE://localhost:9092
+      - --set auto_create_topics_enabled=true
     ports:
       - "8081:8081"
       - "9092:9092"
       - "29092:29092"
+
+  redpanda-init:
+    image: docker.redpanda.com/redpandadata/redpanda:v23.2.19
+    container_name: redpanda-init
+    depends_on:
+      - redpanda
+    entrypoint: [ "bash", "-c", "sleep 5 && rpk topic create user-events --brokers redpanda:29092" ]
 
   postgres:
     image: postgres:15-alpine
