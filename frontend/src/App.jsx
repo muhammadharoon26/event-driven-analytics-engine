@@ -31,7 +31,6 @@ function App() {
     // Optimistic UI updates to fake the latency of the async flow visually
     setStats(prev => ({ ...prev, apiRequests: prev.apiRequests + 1 }));
     
-    // Simulate API accepting -> Kafka queuing -> Python writing
     const newLog = {
       id: Date.now().toString(),
       ...eventData,
@@ -45,11 +44,34 @@ function App() {
       setStats(prev => ({ ...prev, kafkaEvents: prev.kafkaEvents + 1 }));
       setLogs(prev => prev.map(l => l.id === newLog.id ? { ...l, status: 'queued' } : l));
       
-      setTimeout(() => {
-        setStats(prev => ({ ...prev, dbWrites: prev.dbWrites + 1 }));
-        setLogs(prev => prev.map(l => l.id === newLog.id ? { ...l, status: 'persisted' } : l));
-      }, 800);
+      // We start polling for this specific event to see when it reaches DB
+      pollEventStatus(newLog.id, eventData.user_id, eventData.action);
     }, 300);
+  };
+
+  const pollEventStatus = (logId, userId, action) => {
+    const maxAttempts = 10;
+    let attempts = 0;
+    
+    const poll = setInterval(async () => {
+      attempts++;
+      try {
+        const response = await fetch(`http://localhost:8080/api/v1/events/status/${userId}?action=${action}`);
+        const data = await response.json();
+        
+        if (data.status === 'persisted') {
+          clearInterval(poll);
+          setStats(prev => ({ ...prev, dbWrites: prev.dbWrites + 1 }));
+          setLogs(prev => prev.map(l => l.id === logId ? { ...l, status: 'persisted' } : l));
+        } else if (attempts >= maxAttempts) {
+          clearInterval(poll);
+          // Just in case it fails or takes too long
+        }
+      } catch (e) {
+        console.error("Polling error", e);
+        if (attempts >= maxAttempts) clearInterval(poll);
+      }
+    }, 1000); // Poll every 1 second
   };
 
   return (

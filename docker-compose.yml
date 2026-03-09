@@ -34,7 +34,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
       POSTGRES_DB: ${DB_NAME:-analytics}
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - pg-data:/var/lib/postgresql/data
 
@@ -61,6 +61,7 @@ services:
       - KAFKA_TOPIC=user-events
       - KAFKA_GROUP_ID=processor-group
       - DB_HOST=postgres
+      - DB_PORT=5432
       - DB_USER=${DB_USER:-postgres}
       - DB_PASSWORD=${DB_PASSWORD:-postgres}
       - DB_NAME=${DB_NAME:-analytics}
