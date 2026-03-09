@@ -1,0 +1,62 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-test-go:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.23'
+    - name: Go Build Check
+      working-directory: ./ingestion-api
+      run: go build -v ./...
+
+  build-and-test-python:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    - name: Install dependencies
+      working-directory: ./data-processor
+      run: pip install -r requirements.txt
+    - name: Python Syntax/Lint Check
+      working-directory: ./data-processor
+      run: python -m py_compile main.py
+
+  docker-build-push:
+    needs: [build-and-test-go, build-and-test-python]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Login to DockerHub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+    
+    - name: Build and Push Go API
+      uses: docker/build-push-action@v4
+      with:
+        context: ./ingestion-api
+        push: true
+        tags: event-driven-analytics-ingestion-api:latest
+
+    - name: Build and Push Python Processor
+      uses: docker/build-push-action@v4
+      with:
+        context: ./data-processor
+        push: true
+        tags: event-driven-analytics-data-processor:latest

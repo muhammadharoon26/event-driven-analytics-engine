@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: engine-config
+data:
+  KAFKA_BROKERS: "your-upstash-kafka-endpoint:9092"
+  KAFKA_TOPIC: "user-events"
+  KAFKA_DLQ_TOPIC: "user-events-dlq"
+  KAFKA_GROUP_ID: "processor-group"
+  DB_HOST: "your-neon-postgres-endpoint"
+  DB_USER: "postgres"
+  DB_NAME: "analytics"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: engine-secrets
+type: Opaque
+stringData:
+  KAFKA_USERNAME: "your-upstash-username"
+  KAFKA_PASSWORD: "your-upstash-password"
+  DB_PASSWORD: "your-neon-password"

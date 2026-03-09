@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: data-processor
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: data-processor
+  template:
+    metadata:
+      labels:
+        app: data-processor
+    spec:
+      containers:
+        - name: data-processor
+          image: event-driven-analytics-data-processor:latest
+          envFrom:
+            - configMapRef:
+                name: engine-config
+            - secretRef:
+                name: engine-secrets
