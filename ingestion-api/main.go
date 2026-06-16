@@ -8,8 +8,11 @@ import (
 	"time"
 
 	"github.com/event-driven-analytics-engine/ingestion-api/kafka"
+	"github.com/event-driven-analytics-engine/ingestion-api/telemetry"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 // EventPayload represents the incoming JSON payload.
@@ -22,6 +25,22 @@ type EventPayload struct {
 var dbpool *pgxpool.Pool
 
 func main() {
+	// Initialize OpenTelemetry Tracing
+	tp, err := telemetry.InitTracer()
+	if err != nil {
+		log.Fatalf("Failed to initialize tracer: %v", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := tp.Shutdown(ctx); err != nil {
+			log.Printf("Error shutting down tracer provider: %v", err)
+		}
+	}()
+
+	// Set global W3C TraceContext propagator for distributed trace stitching.
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+
 	// Initialize Kafka Producer
 	if err := kafka.InitProducer(); err != nil {
 		log.Fatalf("Failed to initialize Kafka producer: %v", err)
@@ -34,15 +53,19 @@ func main() {
 		dbURL = "postgres://postgres:postgres@localhost:5433/analytics?sslmode=disable"
 	}
 
-	var err error
 	dbpool, err = pgxpool.New(context.Background(), dbURL)
 	if err != nil {
 		log.Fatalf("Unable to create connection pool: %v", err)
 	}
 	defer dbpool.Close()
 
-	// Initialize GinRouter
+	// Initialize Gin Router
 	r := gin.Default()
+
+	// Register OpenTelemetry tracing and latency measurement middlewares.
+	// These MUST come before route definitions so every request is instrumented.
+	r.Use(telemetry.TracingMiddleware())
+	r.Use(telemetry.LatencyMiddleware())
 
 	// Apply CORS middleware
 	r.Use(func(c *gin.Context) {

@@ -10,53 +10,100 @@ jobs:
   build-and-test-go:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Set up Go
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@v5
       with:
-        go-version: '1.23'
+        go-version: '1.25'
     - name: Go Build Check
       working-directory: ./ingestion-api
       run: go build -v ./...
+    - name: Go Unit Tests
+      working-directory: ./ingestion-api
+      run: go test -v -race ./...
 
   build-and-test-python:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
     - name: Install dependencies
       working-directory: ./data-processor
       run: pip install -r requirements.txt
-    - name: Python Syntax/Lint Check
+    - name: Python Lint Check
       working-directory: ./data-processor
       run: python -m py_compile main.py
+    - name: Python Unit Tests
+      working-directory: ./data-processor
+      run: python -m pytest test_main.py -v
+
+  build-frontend:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+    - name: Install dependencies
+      working-directory: ./frontend
+      run: npm ci
+    - name: Build
+      working-directory: ./frontend
+      run: npm run build
+    - name: Lint
+      working-directory: ./frontend
+      run: npm run lint
+
+  terraform-validate:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: '1.7.0'
+    - name: Terraform Init (Neon)
+      working-directory: ./terraform/neon
+      run: terraform init -backend=false
+    - name: Terraform Validate (Neon)
+      working-directory: ./terraform/neon
+      run: terraform validate
+    - name: Terraform Init (Upstash)
+      working-directory: ./terraform/upstash
+      run: terraform init -backend=false
+    - name: Terraform Validate (Upstash)
+      working-directory: ./terraform/upstash
+      run: terraform validate
 
   docker-build-push:
-    needs: [build-and-test-go, build-and-test-python]
+    needs: [build-and-test-go, build-and-test-python, build-frontend]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     
     - name: Login to DockerHub
-      uses: docker/login-action@v2
+      uses: docker/login-action@v3
       with:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_TOKEN }}
     
     - name: Build and Push Go API
-      uses: docker/build-push-action@v4
+      uses: docker/build-push-action@v5
       with:
         context: ./ingestion-api
         push: true
-        tags: event-driven-analytics-ingestion-api:latest
+        tags: ${{ secrets.DOCKERHUB_USERNAME }}/analytics-ingestion-api:latest,${{ secrets.DOCKERHUB_USERNAME }}/analytics-ingestion-api:${{ github.sha }}
 
     - name: Build and Push Python Processor
-      uses: docker/build-push-action@v4
+      uses: docker/build-push-action@v5
       with:
         context: ./data-processor
         push: true
-        tags: event-driven-analytics-data-processor:latest
+        tags: ${{ secrets.DOCKERHUB_USERNAME }}/analytics-data-processor:latest,${{ secrets.DOCKERHUB_USERNAME }}/analytics-data-processor:${{ github.sha }}

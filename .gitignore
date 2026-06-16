@@ -50,3 +50,13 @@ pip-delete-this-directory.txt
 *.swp
 .DS_Store
 Thumbs.db
+
+# Terraform
+terraform/**/.terraform/
+terraform/**/*.tfstate
+terraform/**/*.tfstate.backup
+terraform/**/*.tfplan
+*.tfvars
+
+# Docker
+docker-data/
