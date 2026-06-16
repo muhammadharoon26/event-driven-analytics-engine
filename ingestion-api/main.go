@@ -25,18 +25,20 @@ type EventPayload struct {
 var dbpool *pgxpool.Pool
 
 func main() {
-	// Initialize OpenTelemetry Tracing
+	// Initialize OpenTelemetry Tracing (graceful — API starts even if collector is down)
 	tp, err := telemetry.InitTracer()
 	if err != nil {
-		log.Fatalf("Failed to initialize tracer: %v", err)
+		log.Printf("WARNING: Failed to initialize tracer: %v — continuing without tracing", err)
 	}
-	defer func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := tp.Shutdown(ctx); err != nil {
-			log.Printf("Error shutting down tracer provider: %v", err)
-		}
-	}()
+	if tp != nil {
+		defer func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := tp.Shutdown(ctx); err != nil {
+				log.Printf("Error shutting down tracer provider: %v", err)
+			}
+		}()
+	}
 
 	// Set global W3C TraceContext propagator for distributed trace stitching.
 	otel.SetTextMapPropagator(propagation.TraceContext{})
