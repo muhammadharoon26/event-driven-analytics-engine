@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { Activity, Database, Server, Zap } from 'lucide-react';
+import React, { useState } from 'react';
+import { Zap } from 'lucide-react';
 import EventSender from './components/EventSender';
 import LiveStats from './components/LiveStats';
 import LogsTable from './components/LogsTable';
@@ -10,43 +9,48 @@ function App() {
     apiRequests: 0,
     kafkaEvents: 0,
     dbWrites: 0,
-    latency: 12
+    latency: null
   });
 
   const [logs, setLogs] = useState([]);
 
-  // Simulate WebSocket / periodic polling for metrics
-  useEffect(() => {
-    const interval = setInterval(() => {
-      // In a real app we'd fetch this from the Go/Python services
-      setStats(prev => ({
-        ...prev,
-        latency: Math.floor(Math.random() * 20) + 5
-      }));
-    }, 2000);
-    return () => clearInterval(interval);
-  }, []);
+  // handleEventSent is called by EventSender once the POST has actually
+  // returned. `result.serverLatencyMs` is the real duration measured by the Go
+  // LatencyMiddleware and read back off the X-Response-Time response header —
+  // nothing here is simulated.
+  const handleEventSent = (eventData, result = {}) => {
+    const { ok = false, serverLatencyMs, roundTripMs, error } = result;
 
-  const handleEventSent = (eventData) => {
-    // Optimistic UI updates to fake the latency of the async flow visually
-    setStats(prev => ({ ...prev, apiRequests: prev.apiRequests + 1 }));
-    
     const newLog = {
       id: Date.now().toString(),
       ...eventData,
-      status: 'ingesting',
+      status: ok ? 'queued' : 'failed',
+      error,
+      serverLatencyMs,
+      roundTripMs,
       time: new Date().toLocaleTimeString()
     };
-    
+
     setLogs(prev => [newLog, ...prev].slice(0, 10)); // Keep last 10
-    
-    setTimeout(() => {
-      setStats(prev => ({ ...prev, kafkaEvents: prev.kafkaEvents + 1 }));
-      setLogs(prev => prev.map(l => l.id === newLog.id ? { ...l, status: 'queued' } : l));
-      
-      // We start polling for this specific event to see when it reaches DB
-      pollEventStatus(newLog.id, eventData.user_id, eventData.action);
-    }, 300);
+
+    if (!ok) {
+      // The API rejected it or is down. Do not advance the counters — a red
+      // row is the honest outcome here.
+      return;
+    }
+
+    // The API returned 202, which means the event is on the Kafka topic.
+    // Round-trip is what the browser actually observed (network + handler);
+    // it is the number a user would feel, so that is what the tile shows.
+    setStats(prev => ({
+      ...prev,
+      apiRequests: prev.apiRequests + 1,
+      kafkaEvents: prev.kafkaEvents + 1,
+      latency: roundTripMs ?? serverLatencyMs ?? prev.latency
+    }));
+
+    // Poll for this specific event to see when the Python worker lands it in Postgres.
+    pollEventStatus(newLog.id, eventData.user_id, eventData.action);
   };
 
   const pollEventStatus = (logId, userId, action) => {
@@ -65,11 +69,16 @@ function App() {
           setLogs(prev => prev.map(l => l.id === logId ? { ...l, status: 'persisted' } : l));
         } else if (attempts >= maxAttempts) {
           clearInterval(poll);
-          // Just in case it fails or takes too long
+          // 10s went by and the worker never wrote it. Say so rather than
+          // leaving the row stuck on "Kafka" forever.
+          setLogs(prev => prev.map(l => l.id === logId ? { ...l, status: 'stalled' } : l));
         }
       } catch (e) {
         console.error("Polling error", e);
-        if (attempts >= maxAttempts) clearInterval(poll);
+        if (attempts >= maxAttempts) {
+          clearInterval(poll);
+          setLogs(prev => prev.map(l => l.id === logId ? { ...l, status: 'stalled' } : l));
+        }
       }
     }, 1000); // Poll every 1 second
   };

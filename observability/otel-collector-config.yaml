@@ -21,8 +21,10 @@ exporters:
     tls:
       insecure: true
 
+  # `detailed` prints every attribute of every span to the collector's stdout,
+  # which drowns out real errors under load. `basic` logs a per-batch summary.
   debug:
-    verbosity: detailed
+    verbosity: basic
     sampling_initial: 5
     sampling_thereafter: 200
 

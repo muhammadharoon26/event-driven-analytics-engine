@@ -1,12 +1,33 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Database, Clock, Loader2, ArrowRight, Activity } from 'lucide-react';
+import { Database, Clock, Loader2, ArrowRight, Activity, XCircle, AlertTriangle } from 'lucide-react';
 
 const StatusBadge = ({ status }) => {
   if (status === 'ingesting') {
     return (
       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
         <Loader2 className="w-3 h-3 mr-1 animate-spin" /> API
+      </span>
+    );
+  }
+  if (status === 'accepted') {
+    return (
+      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
+        API 202
+      </span>
+    );
+  }
+  if (status === 'failed') {
+    return (
+      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20">
+        <XCircle className="w-3 h-3 mr-1" /> Failed
+      </span>
+    );
+  }
+  if (status === 'stalled') {
+    return (
+      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
+        <AlertTriangle className="w-3 h-3 mr-1" /> No DB write
       </span>
     );
   }
@@ -58,20 +79,35 @@ const LogsTable = ({ logs }) => {
                     <span className="font-medium text-white">{log.action}</span>
                     <span className="text-gray-500 mx-2">|</span>
                     <span className="text-gray-400">{log.user_id}</span>
+                    {log.roundTripMs != null && (
+                      <span className="text-gray-500 font-mono text-xs ml-2">
+                        rt {log.roundTripMs.toFixed(1)}ms
+                        {log.serverLatencyMs != null && (
+                          <> · srv {log.serverLatencyMs < 0.1 ? '<0.1' : log.serverLatencyMs.toFixed(2)}ms</>
+                        )}
+                      </span>
+                    )}
                   </div>
                 </div>
-                
-                <div className="flex items-center space-x-2">
-                  <StatusBadge status="ingesting" />
-                  <ArrowRight className={`w-3 h-3 ${log.status === 'queued' || log.status === 'persisted' ? 'text-gray-500' : 'text-gray-700'}`} />
-                  {log.status === 'ingesting' ? (
-                    <span className="w-16"></span>
-                  ) : (
+
+                {log.status === 'failed' ? (
+                  <div className="flex items-center space-x-2">
+                    <StatusBadge status="failed" />
+                    <span className="text-xs text-red-400/70">{log.error}</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center space-x-2">
+                    <StatusBadge status="accepted" />
+                    <ArrowRight className="w-3 h-3 text-gray-500" />
                     <StatusBadge status="queued" />
-                  )}
-                  <ArrowRight className={`w-3 h-3 ${log.status === 'persisted' ? 'text-gray-500' : 'text-gray-700'}`} />
-                  {log.status === 'persisted' && <StatusBadge status="persisted" />}
-                </div>
+                    <ArrowRight className={`w-3 h-3 ${log.status === 'persisted' ? 'text-gray-500' : 'text-gray-700'}`} />
+                    {log.status === 'persisted' && <StatusBadge status="persisted" />}
+                    {log.status === 'stalled' && <StatusBadge status="stalled" />}
+                    {log.status === 'queued' && (
+                      <Loader2 className="w-3 h-3 text-gray-500 animate-spin" />
+                    )}
+                  </div>
+                )}
               </motion.div>
             ))}
           </AnimatePresence>

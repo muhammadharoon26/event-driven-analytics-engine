@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Send, Smartphone, ShoppingCart, Eye, MousePointerClick } from 'lucide-react';
+import { Send, Smartphone, ShoppingCart, Eye, MousePointerClick, AlertTriangle } from 'lucide-react';
 import axios from 'axios';
 
 const ACTIONS = [
@@ -9,31 +9,62 @@ const ACTIONS = [
   { id: 'button_click', label: 'Button Click', icon: MousePointerClick, color: 'text-amber-400' },
 ];
 
+// Go's time.Duration.String() emits things like "512.7µs", "1.204ms", "1.05s".
+// Convert whatever the API sent into plain milliseconds.
+const parseGoDuration = (raw) => {
+  if (!raw) return null;
+  const match = String(raw).trim().match(/^([\d.]+)\s*(ns|µs|us|ms|s)$/);
+  if (!match) return null;
+  const value = parseFloat(match[1]);
+  if (Number.isNaN(value)) return null;
+  const toMs = { ns: 1e-6, 'µs': 1e-3, us: 1e-3, ms: 1, s: 1000 };
+  return value * toMs[match[2]];
+};
+
 const EventSender = ({ onSend }) => {
   const [selectedAction, setSelectedAction] = useState(ACTIONS[0].id);
   const [userId, setUserId] = useState('user-' + Math.floor(Math.random() * 10000));
   const [isSending, setIsSending] = useState(false);
+  const [error, setError] = useState(null);
 
   const handleSend = async () => {
     setIsSending(true);
+    setError(null);
     const eventPayload = {
       user_id: userId,
       action: selectedAction,
       timestamp: new Date().toISOString()
     };
 
+    const startedAt = performance.now();
+
     try {
       // In a real environment, this points to your deployed Go API
-      await axios.post('http://localhost:8080/api/v1/events', eventPayload);
-      onSend(eventPayload);
-    } catch (error) {
-      console.error("Failed to send event:", error);
-      // Still trigger UI update for demonstration if API is down
-      onSend(eventPayload);
+      const response = await axios.post('http://localhost:8080/api/v1/events', eventPayload);
+      const roundTripMs = performance.now() - startedAt;
+
+      // X-Response-Time is set by LatencyMiddleware in ingestion-api/telemetry/middleware.go
+      // and exposed to the browser via Access-Control-Expose-Headers in main.go.
+      const serverMs = parseGoDuration(response.headers['x-response-time']);
+
+      onSend(eventPayload, {
+        ok: true,
+        serverLatencyMs: serverMs,
+        roundTripMs
+      });
+
+      // Only roll a fresh user ID once the event actually made it in, so a
+      // retry after a failure re-sends the same identity.
+      setUserId('user-' + Math.floor(Math.random() * 10000));
+    } catch (err) {
+      console.error("Failed to send event:", err);
+      const message = err.response
+        ? `API returned ${err.response.status}`
+        : 'API unreachable on :8080';
+      setError(message);
+      onSend(eventPayload, { ok: false, error: message });
     } finally {
       setIsSending(false);
-      // Generate new user ID for next event
-      setUserId('user-' + Math.floor(Math.random() * 10000));
     }
   };
 
@@ -95,6 +126,13 @@ const EventSender = ({ onSend }) => {
           {/* Shine effect */}
           <div className="absolute inset-0 -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/10 to-transparent z-0"></div>
         </button>
+
+        {error && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-red-500/30 bg-red-500/10 text-red-300 text-sm">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
       </div>
     </div>
   );

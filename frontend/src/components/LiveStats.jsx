@@ -16,7 +16,7 @@ const StatCard = ({ title, value, icon: Icon, colorClass, delay }) => (
         <p className="text-sm font-medium text-gray-400 mb-1">{title}</p>
         <div className="flex items-baseline space-x-2">
           <h3 className="text-3xl font-bold tracking-tight">{value}</h3>
-          {(title === 'Avg Latency') && <span className="text-sm text-gray-500">ms</span>}
+          {(title === 'API Round-Trip') && <span className="text-sm text-gray-500">ms</span>}
         </div>
       </div>
       <div className={`p-3 rounded-xl bg-white/5 border border-white/5 ${colorClass}`}>
@@ -25,6 +25,15 @@ const StatCard = ({ title, value, icon: Icon, colorClass, delay }) => (
     </div>
   </motion.div>
 );
+
+// Real API latencies here are often well under a millisecond, so round to two
+// decimals instead of flooring them to "0".
+const formatLatency = (ms) => {
+  if (ms === null || ms === undefined) return '—';
+  if (ms >= 100) return Math.round(ms).toString();
+  if (ms >= 1) return ms.toFixed(1);
+  return ms.toFixed(2);
+};
 
 const LiveStats = ({ stats }) => {
   return (
@@ -50,10 +59,10 @@ const LiveStats = ({ stats }) => {
         colorClass="text-emerald-400" 
         delay={0.3}
       />
-      <StatCard 
-        title="Avg Latency" 
-        value={stats.latency} 
-        icon={Clock} 
+      <StatCard
+        title="API Round-Trip"
+        value={formatLatency(stats.latency)}
+        icon={Clock}
         colorClass="text-amber-400" 
         delay={0.4}
       />

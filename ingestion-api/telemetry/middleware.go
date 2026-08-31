@@ -60,20 +60,58 @@ func TracingMiddleware() gin.HandlerFunc {
 	}
 }
 
+// latencyWriter wraps gin's ResponseWriter so the X-Response-Time header can be
+// stamped at the last possible moment that still counts: the instant the handler
+// starts writing the response. Setting a header after c.Next() returns is too
+// late — by then Gin has already flushed the header block to the socket and the
+// value is silently dropped.
+type latencyWriter struct {
+	gin.ResponseWriter
+	start   time.Time
+	stamped bool
+	elapsed time.Duration
+}
+
+// stamp records the elapsed time and writes the header. It is idempotent so it
+// can be called from every write path without double-counting.
+func (w *latencyWriter) stamp() {
+	if w.stamped {
+		return
+	}
+	w.stamped = true
+	w.elapsed = time.Since(w.start)
+	w.Header().Set("X-Response-Time", w.elapsed.String())
+}
+
+func (w *latencyWriter) WriteHeader(code int) {
+	w.stamp()
+	w.ResponseWriter.WriteHeader(code)
+}
+
+func (w *latencyWriter) Write(b []byte) (int, error) {
+	w.stamp()
+	return w.ResponseWriter.Write(b)
+}
+
+func (w *latencyWriter) WriteString(s string) (int, error) {
+	w.stamp()
+	return w.ResponseWriter.WriteString(s)
+}
+
 // LatencyMiddleware measures wall-clock response time for every request.
 // It writes the duration as an X-Response-Time header (human-readable) and
 // records it as a span attribute so it shows up in the trace backend.
 func LatencyMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		start := time.Now()
+		lw := &latencyWriter{ResponseWriter: c.Writer, start: time.Now()}
+		c.Writer = lw
 
 		// Process the request.
 		c.Next()
 
-		elapsed := time.Since(start)
-
-		// Expose the latency as a response header for easy verification.
-		c.Writer.Header().Set("X-Response-Time", elapsed.String())
+		// Covers handlers that returned without writing anything.
+		lw.stamp()
+		elapsed := lw.elapsed
 
 		// Attach latency to the active span (if one exists).
 		span := trace.SpanFromContext(c.Request.Context())

@@ -75,6 +75,10 @@ func main() {
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT")
+		// Browsers hide non-safelisted response headers from JS unless they are
+		// explicitly exposed. The dashboard reads X-Response-Time to display the
+		// real server-measured latency instead of a made-up number.
+		c.Writer.Header().Set("Access-Control-Expose-Headers", "X-Response-Time")
 
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)

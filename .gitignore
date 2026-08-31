@@ -60,3 +60,4 @@ terraform/**/*.tfplan
 
 # Docker
 docker-data/
+ONBOARDING.md

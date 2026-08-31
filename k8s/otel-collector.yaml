@@ -66,7 +66,9 @@ data:
         send_batch_size: 1024
     exporters:
       otlp:
-        endpoint: tempo:3200
+        # 4317 is Tempo's OTLP gRPC receiver. 3200 is its HTTP query API —
+        # pointing the exporter there drops every trace on the floor.
+        endpoint: tempo:4317
         tls:
           insecure: true
     service:

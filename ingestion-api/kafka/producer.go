@@ -5,7 +5,9 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
+	"time"
 
 	"github.com/segmentio/kafka-go"
 	"github.com/segmentio/kafka-go/sasl/scram"
@@ -31,7 +33,7 @@ func InitProducer() error {
 	}
 
 	dialer := &kafka.Dialer{
-		Timeout:   10 * 1000 * 1000 * 1000,
+		Timeout:   10 * time.Second,
 		DualStack: true,
 	}
 
@@ -50,7 +52,27 @@ func InitProducer() error {
 		Topic:    topic,
 		Balancer: &kafka.LeastBytes{},
 		Dialer:   dialer,
+
+		// The ingestion endpoint answers 202 Accepted — "we have taken custody
+		// of this event", not "it is durably stored". Async lets WriteMessages
+		// hand the message to the background batcher and return immediately,
+		// which is what keeps the HTTP handler in the sub-millisecond range.
+		// Left synchronous, every request blocks for a full BatchTimeout
+		// (1 second by default) waiting for the batch to flush.
+		Async: true,
+
+		// Flush partial batches quickly so an idle system still delivers
+		// promptly instead of sitting on a message for a whole second.
+		BatchTimeout: 10 * time.Millisecond,
 	})
+
+	// Async writes cannot return an error to the HTTP handler, so surface
+	// delivery failures here instead of dropping them silently.
+	writer.Completion = func(messages []kafka.Message, err error) {
+		if err != nil {
+			log.Printf("[kafka] delivery failed for %d message(s): %v", len(messages), err)
+		}
+	}
 
 	return nil
 }

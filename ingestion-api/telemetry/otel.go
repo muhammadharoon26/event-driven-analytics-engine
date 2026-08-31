@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -26,6 +27,10 @@ func InitTracer() (*sdktrace.TracerProvider, error) {
 	if endpoint == "" {
 		endpoint = "localhost:4317" // Default Jaeger/Collector
 	}
+	// WithEndpoint wants a bare "host:port". The OTEL spec env var is commonly
+	// set to a full URL (e.g. http://otel-collector:4317), so strip the scheme.
+	endpoint = strings.TrimPrefix(strings.TrimPrefix(endpoint, "http://"), "https://")
+	endpoint = strings.TrimSuffix(endpoint, "/")
 
 	exporter, err := otlptracegrpc.New(ctx,
 		otlptracegrpc.WithInsecure(),
